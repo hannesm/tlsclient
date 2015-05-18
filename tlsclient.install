@@ -1,0 +1,7 @@
+bin: [
+  "?_build/src/tlsclient.byte" {"tlsclient"}
+  "?_build/src/tlsclient.native" {"tlsclient"}
+]
+man: [
+  "_build/src/tlsclient.1" {"tlsclient.1"}
+]

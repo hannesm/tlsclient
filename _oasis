@@ -1,0 +1,22 @@
+OASISFormat: 0.4
+Name:        tlsclient
+Version:     0.1.0
+Synopsis:    TLS client
+Authors:     Hannes Mehnert <hannes@mehnert.org>
+Maintainers: Hannes Mehnert <hannes@mehnert.org>
+Homepage:    https://github.com/hannesm/tlsclient
+License:     FreeBSD
+Plugins:     META (0.4), DevFiles (0.4)
+PostBuildCommand: ./_build/src/tlsclient.native --help > ./_build/src/tlsclient.1
+
+BuildTools:  ocamlbuild
+Description:
+  Secure tunnel
+
+Executable "tlsclient"
+  Path            : src/
+  Install         : true
+  CompiledObject  : native
+  MainIs          : tlsclient.ml
+  BuildDepends    : tls, lwt, lwt.syntax, tls.lwt, cmdliner, sexplib, hex
+  ByteOpt         : -w A-4-33-40-41-42-43-34-44

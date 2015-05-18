@@ -1,0 +1,34 @@
+# OASIS_START
+# DO NOT EDIT (digest: ee9278a00406c899cee373bffa7187c1)
+# Ignore VCS directories, you can use the same kind of rule outside
+# OASIS_START/STOP if you want to exclude directories that contains
+# useless stuff for the build process
+true: annot, bin_annot
+<**/.svn>: -traverse
+<**/.svn>: not_hygienic
+".bzr": -traverse
+".bzr": not_hygienic
+".hg": -traverse
+".hg": not_hygienic
+".git": -traverse
+".git": not_hygienic
+"_darcs": -traverse
+"_darcs": not_hygienic
+# Executable tlsclient
+"src/tlsclient.native": oasis_executable_tlsclient_byte
+<src/*.ml{,i,y}>: oasis_executable_tlsclient_byte
+"src/tlsclient.native": pkg_cmdliner
+"src/tlsclient.native": pkg_hex
+"src/tlsclient.native": pkg_lwt
+"src/tlsclient.native": pkg_lwt.syntax
+"src/tlsclient.native": pkg_sexplib
+"src/tlsclient.native": pkg_tls
+"src/tlsclient.native": pkg_tls.lwt
+<src/*.ml{,i,y}>: pkg_cmdliner
+<src/*.ml{,i,y}>: pkg_hex
+<src/*.ml{,i,y}>: pkg_lwt
+<src/*.ml{,i,y}>: pkg_lwt.syntax
+<src/*.ml{,i,y}>: pkg_sexplib
+<src/*.ml{,i,y}>: pkg_tls
+<src/*.ml{,i,y}>: pkg_tls.lwt
+# OASIS_STOP
