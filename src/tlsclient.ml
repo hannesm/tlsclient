@@ -26,7 +26,7 @@ let tls_info t =
     | Some x -> X509.distinguished_name_to_string (X509.subject x)
   and pubkeysize = string_of_int (match epoch.peer_certificate with
       | [] -> 0
-      | x::_ -> match X509.cert_pubkey x with
+      | x::_ -> match X509.public_key x with
         | `RSA p -> Nocrypto.Rsa.pub_bits p
         | _ -> 0)
   in
