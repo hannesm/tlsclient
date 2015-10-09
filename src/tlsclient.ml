@@ -2,7 +2,7 @@
 open Lwt
 
 let indent s n =
-  let padl = n - String.length s in
+  let padl = max 0 (n - String.length s) in
   let pad = String.make padl ' ' in
   s ^ pad
 
@@ -18,7 +18,12 @@ let tls_info t =
   and `Hex master = Hex.of_cstruct epoch.Tls.Core.master_secret
   and certs = List.flatten (List.map (fun x ->
       [ "subject=" ^ X509.distinguished_name_to_string (X509.subject x) ;
-        "issuer=" ^ X509.distinguished_name_to_string (X509.issuer x) ])
+        "issuer=" ^ X509.distinguished_name_to_string (X509.issuer x) ;
+        "sha256 fingerprint: " ^
+          begin match Hex.of_cstruct (X509.fingerprint x `SHA256)
+          with `Hex s -> s end ;
+          (* TODO ensure that the CN etc doesn't contain vt100 control chars *)
+      ])
       epoch.Tls.Core.peer_certificate)
   and trust =
     match epoch.Tls.Core.trust_anchor with
@@ -29,10 +34,14 @@ let tls_info t =
       | x::_ -> match X509.public_key x with
         | `RSA p -> Nocrypto.Rsa.pub_bits p
         | _ -> 0)
+  and server_time =
+    let peer_random = epoch.Tls.Core.peer_random in
+    Int32.to_string (Cstruct.BE.get_uint32 peer_random 0)
   in
   String.concat "\n" (List.map (fun (k, v) ->
-      (indent k 8) ^ ": " ^ String.concat (indent "\n" 11) v)
+      (indent k 9) ^ ": " ^ String.concat (indent "\n" 12) v)
       [ ("protocol", [version]) ;
+        ("timestamp", [server_time]);
         ("cipher", [cipher]) ;
         ("master", [master]) ;
         ("keysize", [pubkeysize]) ;
@@ -51,7 +60,7 @@ let rec read_write buf ic oc =
     (fun _ -> return_unit)
 
 
-let client cas host port =
+let client cas zero_io host port =
   Nocrypto_entropy_lwt.initialize () >>
   X509_lwt.authenticator (match cas with
       | None -> `No_authentication_I'M_STUPID
@@ -62,6 +71,9 @@ let client cas host port =
       (host, port) >>= fun t ->
     let tls_info = tls_info t in
     Printf.printf "%s\n%!" tls_info ;
+
+    if zero_io then raise Exit ;
+
     let ic, oc = Tls_lwt.of_t t in
     (* do reading and writing of stuff! *)
     let pic = Lwt_io.stdin
@@ -73,17 +85,19 @@ let client cas host port =
     ]
     )
     (fun exn ->
-       Printf.printf "failed to establish TLS connection: %s\n" (Printexc.to_string exn) ;
-       return_unit)
+      if exn = Exit then ()
+      else
+        Printf.printf "failed to establish TLS connection: %s\n"
+          (Printexc.to_string exn) ;
+      return_unit)
 
-
-let run_client cas (host, port) =
+let run_client cas zero_io (host, port) =
   Printexc.register_printer (function
       | Tls_lwt.Tls_alert x -> Some ("TLS alert: " ^ Tls.Packet.alert_type_to_string x)
       | Tls_lwt.Tls_failure f -> Some ("TLS failure: " ^ Tls.Engine.string_of_failure f)
       | _ -> None) ;
   Sys.(set_signal sigpipe Signal_ignore) ;
-  Lwt_main.run (client cas host port)
+  Lwt_main.run (client cas zero_io host port)
 
 open Cmdliner
 
@@ -111,6 +125,9 @@ let cas =
   Arg.(value & opt (some string) None & info ["ca"] ~docv:"FILE"
          ~doc:"The full path to PEM encoded certificate authorities. Can either be a FILE or a DIRECTORY.")
 
+let zero_io =
+  let doc = "zero-I/O mode [terminate after printing session info]" in
+  Arg.(value & flag & info ["z"; "zero-io"] ~doc)
 
 let cmd =
   let doc = "TLS client" in
@@ -122,7 +139,7 @@ let cmd =
     `S "SEE ALSO" ;
     `P "$(b,s_client)(1)" ]
   in
-  Term.(pure run_client $ cas $ destination),
+  Term.(pure run_client $ cas $ zero_io $ destination),
   Term.info "tlsclient" ~version:"0.1.0" ~doc ~man
 
 let () =
