@@ -13,18 +13,18 @@ let tls_info t =
     | `Ok data -> data
     | `Error -> assert false
   in
-  let version = Tls.Printer.tls_version_to_string epoch.protocol_version
-  and cipher = Sexplib.Sexp.to_string_hum (Tls.Ciphersuite.sexp_of_ciphersuite epoch.ciphersuite)
-  and `Hex master = Hex.of_cstruct epoch.master_secret
+  let version = Tls.Printer.tls_version_to_string epoch.Tls.Core.protocol_version
+  and cipher = Sexplib.Sexp.to_string_hum (Tls.Ciphersuite.sexp_of_ciphersuite epoch.Tls.Core.ciphersuite)
+  and `Hex master = Hex.of_cstruct epoch.Tls.Core.master_secret
   and certs = List.flatten (List.map (fun x ->
       [ "subject=" ^ X509.distinguished_name_to_string (X509.subject x) ;
         "issuer=" ^ X509.distinguished_name_to_string (X509.issuer x) ])
-      epoch.peer_certificate)
+      epoch.Tls.Core.peer_certificate)
   and trust =
-    match epoch.trust_anchor with
+    match epoch.Tls.Core.trust_anchor with
     | None -> "NONE"
     | Some x -> X509.distinguished_name_to_string (X509.subject x)
-  and pubkeysize = string_of_int (match epoch.peer_certificate with
+  and pubkeysize = string_of_int (match epoch.Tls.Core.peer_certificate with
       | [] -> 0
       | x::_ -> match X509.public_key x with
         | `RSA p -> Nocrypto.Rsa.pub_bits p
