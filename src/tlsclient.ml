@@ -21,7 +21,7 @@ let tls_info t =
         "issuer=" ^ X509.distinguished_name_to_string (X509.issuer x) ;
         "sha256 fingerprint: " ^
           begin match Hex.of_cstruct (X509.fingerprint x `SHA256)
-          with `Hex s -> s end ;
+          with `Hex s -> s end ^ "\n" ;
           (* TODO ensure that the CN etc doesn't contain vt100 control chars *)
       ])
       epoch.Tls.Core.peer_certificate)
@@ -60,11 +60,16 @@ let rec read_write buf ic oc =
     (fun _ -> return_unit)
 
 
-let client cas zero_io host port =
+let client zero_io cas fingerprint host port =
   Nocrypto_entropy_lwt.initialize () >>
-  X509_lwt.authenticator (match cas with
-      | None -> `No_authentication_I'M_STUPID
-      | Some ca -> `Ca_dir ca) >>= fun authenticator ->
+  X509_lwt.authenticator (match cas, fingerprint with
+      | None   , None ->
+          Printf.printf "WARNING: Unauthenticated TLS connection\n" ;
+          `No_authentication_I'M_STUPID
+      | Some _ , Some _ ->
+          failwith "Error; both --ca and --fingerprint were supplied, I can't handle both"
+      | None    , Some hex_fp -> `Hex_fingerprints (`SHA256 , [(host, hex_fp)])
+      | Some ca , None        -> `Ca_dir ca) >>= fun authenticator ->
   catch (fun () ->
     Tls_lwt.Unix.connect
       (Tls.Config.client ~authenticator ())
@@ -91,13 +96,13 @@ let client cas zero_io host port =
           (Printexc.to_string exn) ;
       return_unit)
 
-let run_client cas zero_io (host, port) =
+let run_client zero_io cas fingerprint (host, port) =
   Printexc.register_printer (function
       | Tls_lwt.Tls_alert x -> Some ("TLS alert: " ^ Tls.Packet.alert_type_to_string x)
       | Tls_lwt.Tls_failure f -> Some ("TLS failure: " ^ Tls.Engine.string_of_failure f)
       | _ -> None) ;
   Sys.(set_signal sigpipe Signal_ignore) ;
-  Lwt_main.run (client cas zero_io host port)
+  Lwt_main.run (client zero_io cas fingerprint host port)
 
 open Cmdliner
 
@@ -129,6 +134,10 @@ let zero_io =
   let doc = "zero-I/O mode [terminate after printing session info]" in
   Arg.(value & flag & info ["z"; "zero-io"] ~doc)
 
+let fingerprint =
+  let doc = "Authenticate host using a user-supplied SHA256 fingerprint" in
+  Arg.(value & opt (some string) None & info ["fingerprint"] ~docv:"SHA256_HEX" ~doc)
+
 let cmd =
   let doc = "TLS client" in
   let man = [
@@ -139,7 +148,7 @@ let cmd =
     `S "SEE ALSO" ;
     `P "$(b,s_client)(1)" ]
   in
-  Term.(pure run_client $ cas $ zero_io $ destination),
+  Term.(pure run_client $ zero_io $ cas $ fingerprint $ destination),
   Term.info "tlsclient" ~version:"0.1.0" ~doc ~man
 
 let () =
