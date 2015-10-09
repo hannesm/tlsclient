@@ -60,7 +60,11 @@ let rec read_write buf ic oc =
     (fun _ -> return_unit)
 
 
-let client zero_io cas fingerprint host port =
+let client zero_io cas fingerprint starttls host port =
+  begin match starttls with
+  | Some "xmpp" | None -> ()
+  | Some s -> failwith ("Invalid argument to --starttls: " ^ s)
+  end ;
   Nocrypto_entropy_lwt.initialize () >>
   X509_lwt.authenticator (match cas, fingerprint with
       | None   , None ->
@@ -71,9 +75,31 @@ let client zero_io cas fingerprint host port =
       | None    , Some hex_fp -> `Hex_fingerprints (`SHA256 , [(host, hex_fp)])
       | Some ca , None        -> `Ca_dir ca) >>= fun authenticator ->
   catch (fun () ->
-    Tls_lwt.Unix.connect
-      (Tls.Config.client ~authenticator ())
-      (host, port) >>= fun t ->
+    Lwt_unix.gethostbyname host >>= fun host_entry ->
+    let host_inet_addr = Array.get host_entry.Lwt_unix.h_addr_list 0 in
+    let fd = Lwt_unix.socket host_entry.Lwt_unix.h_addrtype Lwt_unix.SOCK_STREAM 0 in
+    Lwt_unix.connect fd (Lwt_unix.ADDR_INET (host_inet_addr, port)) >>= fun _ ->
+    begin match starttls with
+    | Some "xmpp" ->
+        let send_lwt buf = Lwt_unix.send fd buf 0 Bytes.(length buf) [] in
+        let rec recv_lwt buf offset =
+          Lwt_unix.recv fd buf offset Bytes.((length buf)-offset) [] >>= fun i ->
+            if i <> 50 then recv_lwt buf (offset + i) else return 0
+            (* looking for "<proceed xmlns='urn:ietf:params:xml:ns:xmpp-tls'/>" *)
+        in
+        let read_buffer = Bytes.make 4096 '\x00'
+        and starttls_buf_1 = Bytes.concat Bytes.empty [
+          "<stream:stream xmlns:stream='http://etherx.jabber.org/streams'" ;
+          " xmlns='jabber:client' to='" ; host ; "' version='1.0'>" ]
+        in
+        send_lwt starttls_buf_1 >>= fun _ ->
+        send_lwt "<starttls xmlns='urn:ietf:params:xml:ns:xmpp-tls'/>"  >>= fun _ ->
+        recv_lwt read_buffer 0
+    | None | _ -> return 0
+    end >>= fun _ ->
+    let client = Tls.Config.client ~authenticator () in
+    let trace = fun _ -> () in
+    Tls_lwt.Unix.client_of_fd ~trace client ~host fd >>= fun t ->
     let tls_info = tls_info t in
     Printf.printf "%s\n%!" tls_info ;
 
@@ -96,13 +122,13 @@ let client zero_io cas fingerprint host port =
           (Printexc.to_string exn) ;
       return_unit)
 
-let run_client zero_io cas fingerprint (host, port) =
+let run_client zero_io cas fingerprint starttls (host, port) =
   Printexc.register_printer (function
       | Tls_lwt.Tls_alert x -> Some ("TLS alert: " ^ Tls.Packet.alert_type_to_string x)
       | Tls_lwt.Tls_failure f -> Some ("TLS failure: " ^ Tls.Engine.string_of_failure f)
       | _ -> None) ;
   Sys.(set_signal sigpipe Signal_ignore) ;
-  Lwt_main.run (client zero_io cas fingerprint host port)
+  Lwt_main.run (client zero_io cas fingerprint starttls host port)
 
 open Cmdliner
 
@@ -138,6 +164,10 @@ let fingerprint =
   let doc = "Authenticate host using a user-supplied SHA256 fingerprint" in
   Arg.(value & opt (some string) None & info ["fingerprint"] ~docv:"SHA256_HEX" ~doc)
 
+let starttls =
+  let doc = "Initiate connection using STARTTLS. Currently supported protocols: [xmpp]" in
+  Arg.(value & opt (some string) None & info ["starttls"] ~docv:"[xmpp]" ~doc)
+
 let cmd =
   let doc = "TLS client" in
   let man = [
@@ -148,7 +178,7 @@ let cmd =
     `S "SEE ALSO" ;
     `P "$(b,s_client)(1)" ]
   in
-  Term.(pure run_client $ zero_io $ cas $ fingerprint $ destination),
+  Term.(pure run_client $ zero_io $ cas $ fingerprint $ starttls $ destination),
   Term.info "tlsclient" ~version:"0.1.0" ~doc ~man
 
 let () =
