@@ -100,24 +100,22 @@ let client zero_io cas fingerprint starttls host port =
     let tls_info = tls_info t in
     Printf.printf "%s\n%!" tls_info ;
 
-    if zero_io then raise Exit ;
-
-    let ic, oc = Tls_lwt.of_t t in
-    (* do reading and writing of stuff! *)
-    let pic = Lwt_io.stdin
-    and poc = Lwt_io.stdout
-    in
-    Lwt.join [
-      read_write (Bytes.create 4096) ic poc ;
-      read_write (Bytes.create 4096) pic oc
-    ]
+    if zero_io then
+      Lwt.return_unit
+    else
+      let ic, oc = Tls_lwt.of_t t in
+      (* do reading and writing of stuff! *)
+      let pic = Lwt_io.stdin
+      and poc = Lwt_io.stdout
+      in
+      Lwt.join [
+          read_write (Bytes.create 4096) ic poc ;
+          read_write (Bytes.create 4096) pic oc
+        ]
     )
     (fun exn ->
-      if exn = Exit then ()
-      else
-        Printf.printf "failed to establish TLS connection: %s\n"
-          (Printexc.to_string exn) ;
-      return_unit)
+       Printf.printf "failed to establish TLS connection: %s\n" (Printexc.to_string exn) ;
+       return_unit)
 
 let run_client zero_io cas fingerprint starttls (host, port) =
   Printexc.register_printer (function
