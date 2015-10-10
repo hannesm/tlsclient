@@ -13,14 +13,15 @@ let tls_info t =
     | `Ok data -> data
     | `Error -> assert false
   in
-  let hex x = match Hex.of_cstruct (X509.fingerprint `SHA256 x) with `Hex s -> s in
+  let hex x = Hex.of_cstruct x in
   let version = Tls.Printer.tls_version_to_string epoch.Tls.Core.protocol_version
   and cipher = Sexplib.Sexp.to_string_hum (Tls.Ciphersuite.sexp_of_ciphersuite epoch.Tls.Core.ciphersuite)
-  and `Hex master = Hex.of_cstruct epoch.Tls.Core.master_secret
+  and `Hex master = hex epoch.Tls.Core.master_secret
   and certs = List.flatten (List.map (fun x ->
+      let `Hex fp = hex (X509.fingerprint `SHA256 x) in
       [ "subject=" ^ X509.distinguished_name_to_string (X509.subject x) ;
         "issuer=" ^ X509.distinguished_name_to_string (X509.issuer x) ;
-        "sha256 fingerprint: " ^ hex x ^ "\n" ])
+        "sha256 fingerprint: " ^ fp ^ "\n" ])
       epoch.Tls.Core.peer_certificate)
   and trust =
     match epoch.Tls.Core.trust_anchor with
