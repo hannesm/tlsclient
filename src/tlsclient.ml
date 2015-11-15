@@ -18,10 +18,14 @@ let tls_info t =
   and cipher = Sexplib.Sexp.to_string_hum (Tls.Ciphersuite.sexp_of_ciphersuite epoch.Tls.Core.ciphersuite)
   and `Hex master = hex epoch.Tls.Core.master_secret
   and certs = List.flatten (List.map (fun x ->
-      let `Hex fp = hex (X509.fingerprint `SHA256 x) in
+      let hash = `SHA256 in
+      let `Hex cert_fp = hex X509.(fingerprint hash x)
+      and `Hex key_fp  = hex X509.(key_fingerprint ~hash (public_key x)) in
       [ "subject=" ^ X509.distinguished_name_to_string (X509.subject x) ;
         "issuer=" ^ X509.distinguished_name_to_string (X509.issuer x) ;
-        "sha256 fingerprint: " ^ fp ^ "\n" ])
+        "certificate sha256 fingerprint: " ^ cert_fp ;
+        "public key sha256 fingerprint:  " ^ key_fp ^ "\n"
+      ])
       epoch.Tls.Core.peer_certificate)
   and trust =
     match epoch.Tls.Core.trust_anchor with
@@ -70,7 +74,7 @@ let client zero_io cas fingerprint starttls host port =
           `No_authentication_I'M_STUPID
       | Some _ , Some _ ->
           failwith "Error; both --ca and --fingerprint were supplied, I can't handle both"
-      | None    , Some hex_fp -> `Hex_fingerprints (`SHA256 , [(host, hex_fp)])
+      | None    , Some hex_fp -> `Hex_key_fingerprints (`SHA256 , [(host, hex_fp)])
       | Some ca , None        -> `Ca_dir ca) >>= fun authenticator ->
   catch (fun () ->
     Lwt_unix.gethostbyname host >>= fun host_entry ->
@@ -157,7 +161,8 @@ let zero_io =
   Arg.(value & flag & info ["z"; "zero-io"] ~doc)
 
 let fingerprint =
-  let doc = "Authenticate host using a user-supplied SHA256 fingerprint" in
+  let doc = "Authenticate the host's public key (the signing key; NOT the certificate) "
+          ^ "using a user-supplied SHA256 fingerprint" in
   Arg.(value & opt (some string) None & info ["fingerprint"] ~docv:"SHA256_HEX" ~doc)
 
 let starttls =
