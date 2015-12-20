@@ -10,6 +10,7 @@ license:      "BSD2"
 build: [
   [ "ocaml" "pkg/build.ml" "native=%{ocaml-native}%"
                            "native-dynlink=%{ocaml-native-dynlink}%" ]
+  ["sh" "-c" "if test -f ./tlsclient.native; then ./tlsclient.native --help > _build/tlsclient.1; else ./tlsclient.byte --help > _build/tlsclient.1; fi"]
 ]
 depends: [
   "ocamlfind" {build}

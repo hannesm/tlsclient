@@ -289,7 +289,7 @@ module Pkg : Pkg = struct
     List.iter Topkg.warn_unused unused
 
   let build_strings ?(exec_sep = " ") btool bdir ext_to_string mvs =
-    let no_build = [ ".cmti"; ".cmt" ] in
+    let no_build = [ ".cmti"; ".cmt"; ".1" ] in
     let install = Buffer.create 1871 in
     let exec = Buffer.create 1871 in
     let file_to_str ?(target = false) (n, ext) =
