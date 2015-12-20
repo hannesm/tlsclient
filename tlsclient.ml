@@ -1,5 +1,5 @@
 
-open Lwt
+open Lwt.Infix
 
 let indent s n =
   let padl = max 0 (n - String.length s) in
@@ -55,15 +55,15 @@ let tls_info t =
         ("anchor", [trust]) ])
 
 let rec read_write buf ic oc =
-  catch (fun () ->
-      Lwt_io.read_into ic buf 0 4096 >>= fun l ->
-      if l > 0 then
-        let s = Bytes.sub buf 0 l in
-        Lwt_io.write oc s >>= fun () ->
-        read_write buf ic oc
-      else
-        return_unit)
-    (fun _ -> return_unit)
+  Lwt.catch (fun () ->
+    Lwt_io.read_into ic buf 0 4096 >>= fun l ->
+    if l > 0 then
+      let s = Bytes.sub buf 0 l in
+      Lwt_io.write oc s >>= fun () ->
+      read_write buf ic oc
+    else
+      Lwt.return_unit)
+    (fun _ -> Lwt.return_unit)
 
 
 let client zero_io cas cfingerprint pfingerprint starttls host port =
@@ -71,7 +71,7 @@ let client zero_io cas cfingerprint pfingerprint starttls host port =
   | Some "xmpp" | None -> ()
   | Some s -> failwith ("Invalid argument to --starttls: " ^ s)
   end ;
-  Nocrypto_entropy_lwt.initialize () >>
+  Nocrypto_entropy_lwt.initialize () >>= fun () ->
   (match cas, cfingerprint, pfingerprint with
    | None, None, None ->
       Printf.printf "WARNING: Unauthenticated TLS connection\n" ;
@@ -92,17 +92,17 @@ let client zero_io cas cfingerprint pfingerprint starttls host port =
       Lwt.return (X509.Authenticator.server_cert_fingerprint ~time ~hash ~fingerprints)
    | None, None, Some hex_fp -> X509_lwt.authenticator (`Hex_key_fingerprints (`SHA256 , [(host, hex_fp)]))
    | Some ca, None, None -> X509_lwt.authenticator (`Ca_dir ca)) >>= fun authenticator ->
-  catch (fun () ->
+  Lwt.catch (fun () ->
     Lwt_unix.gethostbyname host >>= fun host_entry ->
     let host_inet_addr = Array.get host_entry.Lwt_unix.h_addr_list 0 in
     let fd = Lwt_unix.socket host_entry.Lwt_unix.h_addrtype Lwt_unix.SOCK_STREAM 0 in
     Lwt_unix.connect fd (Lwt_unix.ADDR_INET (host_inet_addr, port)) >>= fun _ ->
-    begin match starttls with
-    | Some "xmpp" ->
+    (match starttls with
+     | Some "xmpp" ->
         let send_lwt buf = Lwt_unix.send fd buf 0 Bytes.(length buf) [] in
         let rec recv_lwt buf offset =
           Lwt_unix.recv fd buf offset Bytes.((length buf)-offset) [] >>= fun i ->
-            if i <> 50 then recv_lwt buf (offset + i) else return 0
+            if i <> 50 then recv_lwt buf (offset + i) else Lwt.return 0
             (* looking for "<proceed xmlns='urn:ietf:params:xml:ns:xmpp-tls'/>" *)
         in
         let read_buffer = Bytes.make 4096 '\x00'
@@ -111,10 +111,9 @@ let client zero_io cas cfingerprint pfingerprint starttls host port =
           " xmlns='jabber:client' to='" ; host ; "' version='1.0'>" ]
         in
         send_lwt starttls_buf_1 >>= fun _ ->
-        send_lwt "<starttls xmlns='urn:ietf:params:xml:ns:xmpp-tls'/>"  >>= fun _ ->
+        send_lwt "<starttls xmlns='urn:ietf:params:xml:ns:xmpp-tls'/>" >>= fun _ ->
         recv_lwt read_buffer 0
-    | None | _ -> return 0
-    end >>= fun _ ->
+     | None | _ -> Lwt.return 0) >>= fun _ ->
     let client = Tls.Config.client ~authenticator () in
     let trace = fun _ -> () in
     Tls_lwt.Unix.client_of_fd ~trace client ~host fd >>= fun t ->
@@ -136,7 +135,7 @@ let client zero_io cas cfingerprint pfingerprint starttls host port =
     )
     (fun exn ->
        Printf.printf "failed to establish TLS connection: %s\n" (Printexc.to_string exn) ;
-       return_unit)
+       Lwt.return_unit)
 
 let run_client zero_io cas cfingerprint pfingerprint starttls (host, port) =
   Printexc.register_printer (function
