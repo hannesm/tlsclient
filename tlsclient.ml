@@ -7,7 +7,6 @@ let indent s n =
   s ^ pad
 
 let tls_info t =
-  let open Tls.Engine in
   let epoch =
     match Tls_lwt.Unix.epoch t with
     | `Ok data -> data
