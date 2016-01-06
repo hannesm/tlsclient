@@ -4,4 +4,4 @@ true : warn(+A-4-6-7-9-40-42-44-48)
 
 <tlsclient.{ml,byte,native}>: package(tls), package(x509), package(nocrypto), \
   package(lwt), package(hex), package(cmdliner), package(sexplib), \
-  package(lwt.unix), package(tls.lwt), package(nocrypto.lwt)
+  package(lwt.unix), package(tls.lwt), package(nocrypto.lwt), package(ptime)

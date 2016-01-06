@@ -23,4 +23,5 @@ depends: [
   "sexplib"
   "cmdliner"
   "hex" {>= "0.2.0"}
+  "ptime"
 ]

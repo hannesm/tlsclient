@@ -36,7 +36,11 @@ let tls_info t =
         | _ -> 0)
   and server_time =
     let peer_random = epoch.Tls.Core.peer_random in
-    Int32.to_string (Cstruct.BE.get_uint32 peer_random 0)
+    let time = Cstruct.BE.get_uint32 peer_random 0 in
+    let str = "raw: " ^ (Int32.to_string time) in
+    match Ptime.of_float_s (Int32.to_float time) with
+    | None -> str
+    | Some t -> (Ptime.to_rfc3339 t) ^ " (" ^ str ^ ")"
   in
   let cert = match epoch.Tls.Core.peer_certificate with None -> [] | Some x -> [x] in
   let chain, certs = match epoch.Tls.Core.trust_anchor with
