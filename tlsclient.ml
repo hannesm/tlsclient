@@ -66,7 +66,7 @@ let rec read_write buf ic oc =
     (fun _ -> Lwt.return_unit)
 
 
-let client zero_io cas cfingerprint pfingerprint starttls host port =
+let client zero_io trace cas cfingerprint pfingerprint starttls host port =
   begin match starttls with
   | Some "xmpp" | None -> ()
   | Some s -> failwith ("Invalid argument to --starttls: " ^ s)
@@ -115,7 +115,12 @@ let client zero_io cas cfingerprint pfingerprint starttls host port =
         recv_lwt read_buffer 0
      | None | _ -> Lwt.return 0) >>= fun _ ->
     let client = Tls.Config.client ~authenticator () in
-    let trace = fun _ -> () in
+    let trace sexp =
+      if trace then
+        Printf.eprintf "%s\n\n" Sexplib.Sexp.(to_string_hum sexp)
+      else
+        ()
+    in
     Tls_lwt.Unix.client_of_fd ~trace client ~host fd >>= fun t ->
     let tls_info = tls_info t in
     Printf.printf "%s\n%!" tls_info ;
@@ -137,13 +142,13 @@ let client zero_io cas cfingerprint pfingerprint starttls host port =
        Printf.printf "failed to establish TLS connection: %s\n" (Printexc.to_string exn) ;
        Lwt.return_unit)
 
-let run_client zero_io cas cfingerprint pfingerprint starttls (host, port) =
+let run_client zero_io trace cas cfingerprint pfingerprint starttls (host, port) =
   Printexc.register_printer (function
       | Tls_lwt.Tls_alert x -> Some ("TLS alert: " ^ Tls.Packet.alert_type_to_string x)
       | Tls_lwt.Tls_failure f -> Some ("TLS failure: " ^ Tls.Engine.string_of_failure f)
       | _ -> None) ;
   Sys.(set_signal sigpipe Signal_ignore) ;
-  Lwt_main.run (client zero_io cas cfingerprint pfingerprint starttls host port)
+  Lwt_main.run (client zero_io trace cas cfingerprint pfingerprint starttls host port)
 
 open Cmdliner
 
@@ -175,6 +180,10 @@ let zero_io =
   let doc = "zero-I/O mode [terminate after printing session info]" in
   Arg.(value & flag & info ["z"; "zero-io"] ~doc)
 
+let trace =
+  let doc = "trace TLS session (on standard error)" in
+  Arg.(value & flag & info ["t"; "trace"] ~doc)
+
 let cfingerprint =
   let doc = "Authenticate the host's certificate using a user-supplied SHA256 fingerprint" in
   Arg.(value & opt (some string) None & info ["cert-fingerprint"] ~docv:"SHA256_HEX" ~doc)
@@ -198,7 +207,7 @@ let cmd =
     `S "SEE ALSO" ;
     `P "$(b,s_client)(1)" ]
   in
-  Term.(pure run_client $ zero_io $ cas $ cfingerprint $ pfingerprint $ starttls $ destination),
+  Term.(pure run_client $ zero_io $ trace $ cas $ cfingerprint $ pfingerprint $ starttls $ destination),
   Term.info "tlsclient" ~version:"0.1.0" ~doc ~man
 
 let () =
