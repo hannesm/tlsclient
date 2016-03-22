@@ -13,7 +13,7 @@ let tls_info t =
     | `Error -> assert false
   in
   let hex x = Hex.of_cstruct x in
-  let version = Tls.Printer.tls_version_to_string epoch.Tls.Core.protocol_version
+  let version = Sexplib.Sexp.to_string_hum (Tls.Core.sexp_of_tls_version epoch.Tls.Core.protocol_version)
   and cipher = Sexplib.Sexp.to_string_hum (Tls.Ciphersuite.sexp_of_ciphersuite epoch.Tls.Core.ciphersuite)
   and `Hex master = hex epoch.Tls.Core.master_secret
   and pp_certs certs = List.flatten (List.map (fun x ->
