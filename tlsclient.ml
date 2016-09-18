@@ -95,7 +95,9 @@ let client zero_io trace cas cfingerprint pfingerprint starttls host port =
       in
       Lwt.return (X509.Authenticator.server_cert_fingerprint ~time ~hash ~fingerprints)
    | None, None, Some hex_fp -> X509_lwt.authenticator (`Hex_key_fingerprints (`SHA256 , [(host, hex_fp)]))
-   | Some ca, None, None -> X509_lwt.authenticator (`Ca_dir ca)) >>= fun authenticator ->
+   | Some ca, None, None ->
+     let auth = if Sys.is_directory ca then `Ca_dir ca else `Ca_file ca in
+     X509_lwt.authenticator auth) >>= fun authenticator ->
   Lwt.catch (fun () ->
     Lwt_unix.gethostbyname host >>= fun host_entry ->
     let host_inet_addr = Array.get host_entry.Lwt_unix.h_addr_list 0 in
