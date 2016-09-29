@@ -63,7 +63,7 @@ let rec read_write buf ic oc =
     Lwt_io.read_into ic buf 0 4096 >>= fun l ->
     if l > 0 then
       let s = Bytes.sub buf 0 l in
-      Lwt_io.write oc s >>= fun () ->
+      Lwt_io.write_from oc s 0 l >>= fun _n ->
       read_write buf ic oc
     else
       Lwt.return_unit)
@@ -112,12 +112,12 @@ let client zero_io trace cas cfingerprint pfingerprint starttls host port =
             (* looking for "<proceed xmlns='urn:ietf:params:xml:ns:xmpp-tls'/>" *)
         in
         let read_buffer = Bytes.make 4096 '\x00'
-        and starttls_buf_1 = Bytes.concat Bytes.empty [
+        and starttls_buf_1 = String.concat "" [
           "<stream:stream xmlns:stream='http://etherx.jabber.org/streams'" ;
           " xmlns='jabber:client' to='" ; host ; "' version='1.0'>" ]
         in
-        send_lwt starttls_buf_1 >>= fun _ ->
-        send_lwt "<starttls xmlns='urn:ietf:params:xml:ns:xmpp-tls'/>" >>= fun _ ->
+        send_lwt (Bytes.of_string starttls_buf_1) >>= fun _ ->
+        send_lwt (Bytes.of_string "<starttls xmlns='urn:ietf:params:xml:ns:xmpp-tls'/>") >>= fun _ ->
         recv_lwt read_buffer 0
      | None | _ -> Lwt.return 0) >>= fun _ ->
     let client = Tls.Config.client ~authenticator () in
@@ -214,7 +214,7 @@ let cmd =
     `P "$(b,s_client)(1)" ]
   in
   Term.(pure run_client $ zero_io $ trace $ cas $ cfingerprint $ pfingerprint $ starttls $ destination),
-  Term.info "tlsclient" ~version:"0.1.0" ~doc ~man
+  Term.info "tlsclient" ~version:"%%VERSION_NUM%%" ~doc ~man
 
 let () =
   match Term.eval cmd

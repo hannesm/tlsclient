@@ -8,18 +8,17 @@ maintainer:   ["Hannes Mehnert <hannes@mehnert.org>"]
 license:      "BSD2"
 
 build: [
-  [ "ocaml" "pkg/build.ml" "native=%{ocaml-native}%"
-                           "native-dynlink=%{ocaml-native-dynlink}%" ]
-  ["sh" "-exc" "if test -f ./tlsclient.native; then ./tlsclient.native --help > _build/tlsclient.1; else ./tlsclient.byte --help > _build/tlsclient.1; fi"]
+  ["ocaml" "pkg/pkg.ml" "build" "--pinned" "%{pinned}%"]
 ]
+
 depends: [
   "ocamlfind" {build}
   "ocamlbuild" {build}
+  "topkg" {build}
   "tls" {>= "0.7.0"}
   "x509" {>= "0.5.0"}
   "nocrypto" {>= "0.4.0"}
   "lwt"
-  "type_conv"
   "sexplib"
   "cmdliner"
   "hex" {>= "0.2.0"}

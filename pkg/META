@@ -1,0 +1,3 @@
+description = "A TLS client using OCaml-TLS"
+version = "%%VERSION_NUM%%"
+requires = "tls x509 nocrypto lwt hex cmdliner sexplib lwt.unix tls.lwt nocrypto.lwt ptime"
