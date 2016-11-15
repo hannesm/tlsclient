@@ -1,4 +1,4 @@
-true : bin_annot, safe_string, principal
-true : warn(+A-4-6-7-9-40-42-44-48)
+true : color(always), bin_annot, safe_string, principal
+true : warn(+A-44-58)
 
 <tlsclient.{ml,byte,native}>: package(tls x509 nocrypto lwt hex cmdliner sexplib lwt.unix tls.lwt nocrypto.lwt ptime)
