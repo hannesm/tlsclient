@@ -70,7 +70,7 @@ let rec read_write buf ic oc =
     (fun _ -> Lwt.return_unit)
 
 
-let client zero_io trace cas cfingerprint pfingerprint starttls host port =
+let client zero_io trace cas cfingerprint pfingerprint starttls host port cert key =
   begin match starttls with
   | Some "xmpp" | None -> ()
   | Some s -> failwith ("Invalid argument to --starttls: " ^ s)
@@ -120,7 +120,10 @@ let client zero_io trace cas cfingerprint pfingerprint starttls host port =
         send_lwt (Bytes.of_string "<starttls xmlns='urn:ietf:params:xml:ns:xmpp-tls'/>") >>= fun _ ->
         recv_lwt read_buffer 0
      | None | _ -> Lwt.return 0) >>= fun _ ->
-    let client = Tls.Config.client ~authenticator () in
+    (match cert, key with
+     | None, _ | _, None -> Lwt.return `None
+     | Some cert, Some priv_key -> X509_lwt.private_of_pems ~cert ~priv_key >|= fun x -> `Single x) >>= fun certificates ->
+    let client = Tls.Config.client ~certificates ~authenticator () in
     let trace sexp =
       if trace then
         Printf.eprintf "%s\n\n" Sexplib.Sexp.(to_string_hum sexp)
@@ -148,13 +151,13 @@ let client zero_io trace cas cfingerprint pfingerprint starttls host port =
        Printf.printf "failed to establish TLS connection: %s\n" (Printexc.to_string exn) ;
        Lwt.return_unit)
 
-let run_client zero_io trace cas cfingerprint pfingerprint starttls (host, port) =
+let run_client zero_io trace cas cfingerprint pfingerprint starttls (host, port) cert key =
   Printexc.register_printer (function
       | Tls_lwt.Tls_alert x -> Some ("TLS alert: " ^ Tls.Packet.alert_type_to_string x)
       | Tls_lwt.Tls_failure f -> Some ("TLS failure: " ^ Tls.Engine.string_of_failure f)
       | _ -> None) ;
   Sys.(set_signal sigpipe Signal_ignore) ;
-  Lwt_main.run (client zero_io trace cas cfingerprint pfingerprint starttls host port)
+  Lwt_main.run (client zero_io trace cas cfingerprint pfingerprint starttls host port cert key)
 
 open Cmdliner
 
@@ -202,6 +205,14 @@ let starttls =
   let doc = "Initiate connection using STARTTLS. Currently supported protocols: [xmpp]" in
   Arg.(value & opt (some string) None & info ["starttls"] ~docv:"[xmpp]" ~doc)
 
+let client_cert =
+  let doc = "Use a client certificate chain" in
+  Arg.(value & opt (some file) None & info ["cert"] ~doc)
+
+let client_key =
+  let doc = "Use a client key" in
+  Arg.(value & opt (some file) None & info ["key"] ~doc)
+
 let cmd =
   let doc = "TLS client" in
   let man = [
@@ -213,7 +224,7 @@ let cmd =
     `S "SEE ALSO" ;
     `P "$(b,s_client)(1)" ]
   in
-  Term.(pure run_client $ zero_io $ trace $ cas $ cfingerprint $ pfingerprint $ starttls $ destination),
+  Term.(pure run_client $ zero_io $ trace $ cas $ cfingerprint $ pfingerprint $ starttls $ destination $ client_cert $ client_key),
   Term.info "tlsclient" ~version:"%%VERSION_NUM%%" ~doc ~man
 
 let () =
