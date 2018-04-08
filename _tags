@@ -1,4 +1,4 @@
 true : color(always), bin_annot, safe_string, principal
 true : warn(+A-44-58)
 
-<tlsclient.{ml,byte,native}>: package(tls x509 nocrypto lwt hex cmdliner sexplib lwt.unix tls.lwt nocrypto.lwt ptime)
+<tlsclient.{ml,byte,native}>: package(tls x509 nocrypto lwt hex cmdliner sexplib lwt.unix tls.lwt nocrypto.lwt ptime ptime.clock.os)

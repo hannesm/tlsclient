@@ -85,7 +85,7 @@ let client zero_io trace cas cfingerprint pfingerprint starttls host port cert k
    | _ , Some _, Some _ ->
       failwith "Error; multiple authentication methods were supplied, I cannot handle this"
    | None, Some hex_fp, None ->
-      let time = Unix.gettimeofday () in
+      let time = Ptime_clock.now () in
       let fp =
         Nocrypto.Uncommon.Cs.of_hex
           (String.map (function ':' -> ' ' | x -> x) hex_fp)
