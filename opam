@@ -1,17 +1,12 @@
-opam-version: "1.2"
-name:         "tlsclient"
-homepage:     "https://github.com/hannesm/tlsclient"
-dev-repo:     "https://github.com/hannesm/tlsclient.git"
-bug-reports:  "https://github.com/hannesm/tlsclient/issues"
-author:       ["Hannes Mehnert <hannes@mehnert.org>"]
-maintainer:   ["Hannes Mehnert <hannes@mehnert.org>"]
-license:      "BSD2"
-
-build: [
-  ["ocaml" "pkg/pkg.ml" "build" "--pinned" "%{pinned}%"]
-]
-
+opam-version: "2.0"
+name: "tlsclient"
+maintainer: "Hannes Mehnert <hannes@mehnert.org>"
+authors: "Hannes Mehnert <hannes@mehnert.org>"
+license: "BSD2"
+homepage: "https://github.com/hannesm/tlsclient"
+bug-reports: "https://github.com/hannesm/tlsclient/issues"
 depends: [
+  "ocaml"
   "ocamlfind" {build}
   "ocamlbuild" {build}
   "topkg" {build}
@@ -24,3 +19,5 @@ depends: [
   "hex" {>= "0.2.0"}
   "ptime"
 ]
+build: ["ocaml" "pkg/pkg.ml" "build" "--pinned" "%{pinned}%"]
+dev-repo: "git+https://github.com/hannesm/tlsclient.git"
