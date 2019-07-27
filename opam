@@ -11,13 +11,20 @@ depends: [
   "ocamlbuild" {build}
   "topkg" {build}
   "tls" {>= "0.9.0"}
-  "x509" {>= "0.6.0"}
+  "x509" {>= "0.7.0"}
   "nocrypto" {>= "0.4.0"}
   "lwt"
   "sexplib"
   "cmdliner"
   "hex" {>= "0.2.0"}
   "ptime"
+  "fmt"
+  "domain-name" {>= "0.3.0"}
 ]
 build: ["ocaml" "pkg/pkg.ml" "build" "--pinned" "%{pinned}%"]
 dev-repo: "git+https://github.com/hannesm/tlsclient.git"
+synopsis: "A command-line TLS client"
+description: """
+A command-line TLS client, similar to `openssl -s_client` using the TLS
+implementation native to OCaml.
+"""

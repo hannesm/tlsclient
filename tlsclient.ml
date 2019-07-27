@@ -18,20 +18,20 @@ let tls_info t =
   and `Hex master = hex epoch.Tls.Core.master_secret
   and pp_certs certs = List.flatten (List.map (fun x ->
       let hash = `SHA256 in
-      let `Hex cert_fp = hex X509.(fingerprint hash x)
-      and `Hex key_fp  = hex X509.(key_fingerprint ~hash (public_key x)) in
-      [ "subject=" ^ X509.distinguished_name_to_string (X509.subject x) ;
-        "issuer=" ^ X509.distinguished_name_to_string (X509.issuer x) ;
+      let `Hex cert_fp = hex (X509.Certificate.fingerprint hash x)
+      and `Hex key_fp  = hex X509.(Public_key.fingerprint ~hash (Certificate.public_key x)) in
+      [ "subject=" ^ Fmt.to_to_string X509.Distinguished_name.pp (X509.Certificate.subject x) ;
+        "issuer=" ^ Fmt.to_to_string X509.Distinguished_name.pp (X509.Certificate.issuer x) ;
         "certificate sha256 fingerprint: " ^ cert_fp ;
         "public key sha256 fingerprint:  " ^ key_fp ^ "\n"
       ]) certs)
   and trust =
     match epoch.Tls.Core.trust_anchor with
     | None -> "NONE"
-    | Some x -> X509.distinguished_name_to_string (X509.subject x)
+    | Some x -> Fmt.to_to_string X509.Distinguished_name.pp (X509.Certificate.subject x)
   and pubkeysize = string_of_int (match epoch.Tls.Core.peer_certificate with
       | None -> 0
-      | Some x -> match X509.public_key x with
+      | Some x -> match X509.Certificate.public_key x with
         | `RSA p -> Nocrypto.Rsa.pub_bits p
         | _ -> 0)
   and server_time =
@@ -76,6 +76,7 @@ let client zero_io trace cas cfingerprint pfingerprint starttls host port cert k
   | Some s -> failwith ("Invalid argument to --starttls: " ^ s)
   end ;
   Nocrypto_entropy_lwt.initialize () >>= fun () ->
+  let domain_name = Domain_name.of_string_exn host in
   (match cas, cfingerprint, pfingerprint with
    | None, None, None ->
       Printf.printf "WARNING: Unauthenticated TLS connection\n" ;
@@ -90,11 +91,11 @@ let client zero_io trace cas cfingerprint pfingerprint starttls host port cert k
         Nocrypto.Uncommon.Cs.of_hex
           (String.map (function ':' -> ' ' | x -> x) hex_fp)
       in
-      let fingerprints = [(host, fp)]
+      let fingerprints = [ domain_name, fp ]
       and hash = `SHA256
       in
       Lwt.return (X509.Authenticator.server_cert_fingerprint ~time ~hash ~fingerprints)
-   | None, None, Some hex_fp -> X509_lwt.authenticator (`Hex_key_fingerprints (`SHA256 , [(host, hex_fp)]))
+   | None, None, Some hex_fp -> X509_lwt.authenticator (`Hex_key_fingerprints (`SHA256 , [ domain_name, hex_fp ]))
    | Some ca, None, None ->
      let auth = if Sys.is_directory ca then `Ca_dir ca else `Ca_file ca in
      X509_lwt.authenticator auth) >>= fun authenticator ->
