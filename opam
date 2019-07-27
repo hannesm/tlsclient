@@ -6,7 +6,7 @@ license: "BSD2"
 homepage: "https://github.com/hannesm/tlsclient"
 bug-reports: "https://github.com/hannesm/tlsclient/issues"
 depends: [
-  "ocaml"
+  "ocaml" {>= "4.04.2"}
   "ocamlfind" {build}
   "ocamlbuild" {build}
   "topkg" {build}
