@@ -32,7 +32,7 @@ let tls_info t =
   and pubkeysize = string_of_int (match epoch.Tls.Core.peer_certificate with
       | None -> 0
       | Some x -> match X509.Certificate.public_key x with
-        | `RSA p -> Nocrypto.Rsa.pub_bits p
+        | `RSA p -> Mirage_crypto_pk.Rsa.pub_bits p
         | _ -> 0)
   and server_time =
     let peer_random = epoch.Tls.Core.peer_random in
@@ -70,26 +70,25 @@ let rec read_write buf ic oc =
     (fun _ -> Lwt.return_unit)
 
 
-let client zero_io trace cas cfingerprint pfingerprint starttls host port cert key =
+let client zero_io cas cfingerprint pfingerprint starttls hostname port cert key =
   begin match starttls with
   | Some "xmpp" | None -> ()
   | Some s -> failwith ("Invalid argument to --starttls: " ^ s)
   end ;
-  Nocrypto_entropy_lwt.initialize () >>= fun () ->
-  let domain_name = Domain_name.of_string_exn host in
+  Mirage_crypto_rng_lwt.initialize () >>= fun () ->
+  let domain_name = Domain_name.(of_string_exn hostname |> host_exn) in
   (match cas, cfingerprint, pfingerprint with
    | None, None, None ->
       Printf.printf "WARNING: Unauthenticated TLS connection\n" ;
-      X509_lwt.authenticator `No_authentication_I'M_STUPID
+      Lwt.return (fun ~host:_ _ -> Ok None)
    | Some _ , Some _, _
    | Some _ , _, Some _
    | _ , Some _, Some _ ->
       failwith "Error; multiple authentication methods were supplied, I cannot handle this"
    | None, Some hex_fp, None ->
-      let time = Ptime_clock.now () in
+      let time () = Some (Ptime_clock.now ()) in
       let fp =
-        Nocrypto.Uncommon.Cs.of_hex
-          (String.map (function ':' -> ' ' | x -> x) hex_fp)
+        Cstruct.of_hex (String.map (function ':' -> ' ' | x -> x) hex_fp)
       in
       let fingerprints = [ domain_name, fp ]
       and hash = `SHA256
@@ -100,7 +99,7 @@ let client zero_io trace cas cfingerprint pfingerprint starttls host port cert k
      let auth = if Sys.is_directory ca then `Ca_dir ca else `Ca_file ca in
      X509_lwt.authenticator auth) >>= fun authenticator ->
   Lwt.catch (fun () ->
-    Lwt_unix.gethostbyname host >>= fun host_entry ->
+    Lwt_unix.gethostbyname hostname >>= fun host_entry ->
     let host_inet_addr = Array.get host_entry.Lwt_unix.h_addr_list 0 in
     let fd = Lwt_unix.socket host_entry.Lwt_unix.h_addrtype Lwt_unix.SOCK_STREAM 0 in
     Lwt_unix.connect fd (Lwt_unix.ADDR_INET (host_inet_addr, port)) >>= fun _ ->
@@ -115,7 +114,7 @@ let client zero_io trace cas cfingerprint pfingerprint starttls host port cert k
         let read_buffer = Bytes.make 4096 '\x00'
         and starttls_buf_1 = String.concat "" [
           "<stream:stream xmlns:stream='http://etherx.jabber.org/streams'" ;
-          " xmlns='jabber:client' to='" ; host ; "' version='1.0'>" ]
+          " xmlns='jabber:client' to='" ; hostname ; "' version='1.0'>" ]
         in
         send_lwt (Bytes.of_string starttls_buf_1) >>= fun _ ->
         send_lwt (Bytes.of_string "<starttls xmlns='urn:ietf:params:xml:ns:xmpp-tls'/>") >>= fun _ ->
@@ -125,13 +124,7 @@ let client zero_io trace cas cfingerprint pfingerprint starttls host port cert k
      | None, _ | _, None -> Lwt.return `None
      | Some cert, Some priv_key -> X509_lwt.private_of_pems ~cert ~priv_key >|= fun x -> `Single x) >>= fun certificates ->
     let client = Tls.Config.client ~certificates ~authenticator () in
-    let trace sexp =
-      if trace then
-        Printf.eprintf "%s\n\n" Sexplib.Sexp.(to_string_hum sexp)
-      else
-        ()
-    in
-    Tls_lwt.Unix.client_of_fd ~trace client ~host fd >>= fun t ->
+    Tls_lwt.Unix.client_of_fd client ~host:hostname fd >>= fun t ->
     let tls_info = tls_info t in
     Printf.printf "%s\n%!" tls_info ;
 
@@ -152,15 +145,25 @@ let client zero_io trace cas cfingerprint pfingerprint starttls host port cert k
        Printf.printf "failed to establish TLS connection: %s\n" (Printexc.to_string exn) ;
        Lwt.return_unit)
 
-let run_client zero_io trace cas cfingerprint pfingerprint starttls (host, port) cert key =
+let run_client _ zero_io cas cfingerprint pfingerprint starttls (host, port) cert key =
   Printexc.register_printer (function
       | Tls_lwt.Tls_alert x -> Some ("TLS alert: " ^ Tls.Packet.alert_type_to_string x)
       | Tls_lwt.Tls_failure f -> Some ("TLS failure: " ^ Tls.Engine.string_of_failure f)
       | _ -> None) ;
   Sys.(set_signal sigpipe Signal_ignore) ;
-  Lwt_main.run (client zero_io trace cas cfingerprint pfingerprint starttls host port cert key)
+  Lwt_main.run (client zero_io cas cfingerprint pfingerprint starttls host port cert key)
+
+let setup_log style_renderer level =
+  Fmt_tty.setup_std_outputs ?style_renderer ();
+  Logs.set_level level;
+  Logs.set_reporter (Logs_fmt.reporter ~dst:Format.std_formatter ())
 
 open Cmdliner
+
+let setup_log =
+  Term.(const setup_log
+        $ Fmt_cli.style_renderer ()
+        $ Logs_cli.level ())
 
 let host_port : (string * int) Arg.converter =
   let parse s =
@@ -189,10 +192,6 @@ let cas =
 let zero_io =
   let doc = "zero-I/O mode [terminate after printing session info]" in
   Arg.(value & flag & info ["z"; "zero-io"] ~doc)
-
-let trace =
-  let doc = "trace TLS session (on standard error)" in
-  Arg.(value & flag & info ["t"; "trace"] ~doc)
 
 let cfingerprint =
   let doc = "Authenticate the host's certificate using a user-supplied SHA256 fingerprint" in
@@ -225,7 +224,7 @@ let cmd =
     `S "SEE ALSO" ;
     `P "$(b,s_client)(1)" ]
   in
-  Term.(pure run_client $ zero_io $ trace $ cas $ cfingerprint $ pfingerprint $ starttls $ destination $ client_cert $ client_key),
+  Term.(pure run_client $ setup_log $ zero_io $ cas $ cfingerprint $ pfingerprint $ starttls $ destination $ client_cert $ client_key),
   Term.info "tlsclient" ~version:"%%VERSION_NUM%%" ~doc ~man
 
 let () =

@@ -12,7 +12,6 @@ depends: [
   "topkg" {build}
   "tls" {>= "0.9.0"}
   "x509" {>= "0.7.0"}
-  "nocrypto" {>= "0.4.0"}
   "lwt"
   "sexplib"
   "cmdliner"
@@ -20,6 +19,9 @@ depends: [
   "ptime"
   "fmt"
   "domain-name" {>= "0.3.0"}
+  "mirage-crypto-rng" {>= "0.7.0"}
+  "mirage-crypto-pk"
+  "logs"
 ]
 build: ["ocaml" "pkg/pkg.ml" "build" "--pinned" "%{pinned}%"]
 dev-repo: "git+https://github.com/hannesm/tlsclient.git"
